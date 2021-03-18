@@ -2,3 +2,8 @@
 .vscode/
 linux/
 cmake-build-debug/
+
+*.o
+*.ko
+*.cmd
+*.mod
