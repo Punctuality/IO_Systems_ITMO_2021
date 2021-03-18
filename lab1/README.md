@@ -85,4 +85,38 @@ chmod 777 /dev/var2
 
 ## Примеры использования
 
+```bash
+linux-pc@student lab1> echo "2 + 2" > /dev/var2
+linux-pc@student lab1> echo "2 - 2" > /dev/var2
+linux-pc@student lab1> echo "2 / 2" > /dev/var2
+linux-pc@student lab1> echo "2 * 2" > /dev/var2
+linux-pc@student lab1> echo "2 / 0" > /dev/var2
+linux-pc@student lab1> cat /proc/var2
+ERR: ZeroDivision
+Result 4: 4
+Result 3: 1
+Result 2: 0
+Result 1: 4
+linux-pc@student lab1> dmesg | tail -n 19
+[  197.272779] Loading module
+[  197.272782] drv_module: Registered with major 242
+[  197.272790] drv_module: Registered device class: drv_modules
+[  197.272833] drv_module: Registered device: /dev/var2
+[  197.272836] drv_module: /proc/var2 is created
+[  229.865844] drv_module: Invoked proc_read
+[  229.865846] drv_module: Result 5: ERR: ZeroDivision
+[  229.865849] drv_module: Result 4: 4
+[  229.865849] drv_module: Result 3: 1
+[  229.865850] drv_module: Result 2: 0
+[  229.865851] drv_module: Result 1: 4
+[  229.865851] drv_module: Sum of all correct expressions: 9
+[  229.865876] drv_module: Invoked proc_read
+[  229.865877] drv_module: Result 5: ERR: ZeroDivision
+[  229.865879] drv_module: Result 4: 4
+[  229.865880] drv_module: Result 3: 1
+[  229.865880] drv_module: Result 2: 0
+[  229.865881] drv_module: Result 1: 4
+[  229.865881] drv_module: Sum of all correct expressions: 9
+```
+
 ...
