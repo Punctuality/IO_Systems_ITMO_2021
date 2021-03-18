@@ -10,7 +10,7 @@ all: build install
 build:
 	/usr/bin/make -C /lib/modules/$(KERNEL)/build M=$(PATH_SRC) modules
 
-clean: uninstall
+clean:
 	/usr/bin/make -C /lib/modules/$(KERNEL)/build M=$(PATH_SRC) clean
 
 install:
