@@ -26,4 +26,6 @@ uninstall:
 	sudo rm -f /dev/$(MODULE_NAME)
 	sudo rm -f /proc/$(MODULE_NAME)
 
-recompile: uninstall clean build install
+purge: uninstall clean
+
+recompile: purge all
