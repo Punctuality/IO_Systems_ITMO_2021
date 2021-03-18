@@ -1,3 +1,0 @@
-/Users/sdfedorov/Documents/ITMO/6 semester/IO_Systems_ITMO_2021/cmake-build-debug/CMakeFiles/rebuild_cache.dir
-/Users/sdfedorov/Documents/ITMO/6 semester/IO_Systems_ITMO_2021/cmake-build-debug/CMakeFiles/edit_cache.dir
-/Users/sdfedorov/Documents/ITMO/6 semester/IO_Systems_ITMO_2021/cmake-build-debug/CMakeFiles/IO_Systems_ITMO_2021.dir
