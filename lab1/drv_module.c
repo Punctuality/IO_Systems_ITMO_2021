@@ -36,6 +36,8 @@
 
 #ifndef ERRORS_CODE
 #define ERRORS_CODE
+#define EMPTY_EXPRESSION 3
+#define WRONG_EXPRESSION 2
 #define ZERO_DIVISION 1
 #define NO_ERROR 0
 #endif
@@ -69,6 +71,7 @@ static struct proc_dir_entry* entry;
 int arithmeticError = NO_ERROR;
 
 static int majorNumber = 0;
+static int minorNumber = 0;
 static struct device* chr_device;
 static struct class* class;
 
@@ -82,7 +85,8 @@ static ssize_t proc_read(struct file*, char __user*, size_t, loff_t*);
 
 static long process(const char __user* buffer, size_t len, loff_t* offset) {
 	long long result;
-	int isFirst = 1;
+    char wasAny = 0;
+	char isFirst = 1;
 	long long operand_1 = 0;
 	long long operand_2 = 0;
 	char operator = ' ';
@@ -93,6 +97,7 @@ static long process(const char __user* buffer, size_t len, loff_t* offset) {
 		get_user(getChar, buffer + i);
 
 		if (getChar >= '0' && getChar <= '9') {
+            wasAny = 1;
 			if (isFirst) {
 			    operand_1 *= 10;
 			    operand_1 += getChar - '0';
@@ -119,21 +124,36 @@ static long process(const char __user* buffer, size_t len, loff_t* offset) {
 
     switch (operator) {
 	    case '+':
-	        result = operand_1 + operand_2; break;
+	        result = operand_1 + operand_2;
+            arithmeticError = NO_ERROR;
+            break;
         case '-':
-            result = operand_1 - operand_2; break;
+            result = operand_1 - operand_2;
+            arithmeticError = NO_ERROR;
+            break;
         case '*':
-            result = operand_1 * operand_2; break;
+            result = operand_1 * operand_2;
+            arithmeticError = NO_ERROR;
+            break;
         case '/':
             if (operand_2 == 0) {
                 result = LLMAX;
                 arithmeticError = ZERO_DIVISION;
                 return len;
             }
-            result = operand_1 / operand_2; break;
+            result = operand_1 / operand_2;
+            arithmeticError = NO_ERROR;
+            break;
+        default:
+            if (wasAny) {
+                arithmeticError = WRONG_EXPRESSION;
+            } else {
+                arithmeticError = EMPTY_EXPRESSION;
+            }
+            result = -1;
     }
 
-	arithmeticError = NO_ERROR;
+	
 	return result;
 }
 
@@ -206,6 +226,16 @@ static ssize_t proc_read(struct file* file, char __user *ubuf, size_t count, lof
                 printk(KERN_ALERT "%s: Result %ld: %s\n", THIS_MODULE->name, list_size - i, "ERR: ZeroDivision");
                 break;
             }
+            case WRONG_EXPRESSION: {
+                snprintf(buf+(i*LONG_STR_LEN), LONG_STR_LEN, "%s\n", "ERR: WrongExpression");
+                printk(KERN_ALERT "%s: Result %ld: %s\n", THIS_MODULE->name, list_size - i, "ERR: WrongExpression");
+                break;
+            }
+            case EMPTY_EXPRESSION: {
+                snprintf(buf+(i*LONG_STR_LEN), LONG_STR_LEN, "%s\n", "ERR: EmptyExpression");
+                printk(KERN_ALERT "%s: Result %ld: %s\n", THIS_MODULE->name, list_size - i, "ERR: EmptyExpression");
+                break;
+            }
         }
         i++;
     }
@@ -248,7 +278,7 @@ static int __init init(void) {
         printk(KERN_INFO "%s: Registered device class: %s\n", THIS_MODULE->name, CLASS_NAME);
     }
 
-    chr_device = device_create(class, NULL, MKDEV(majorNumber, 0), NULL, DEVICE_NAME);
+    chr_device = device_create(class, NULL, MKDEV(majorNumber, minorNumber), NULL, DEVICE_NAME);
     if (IS_ERR(chr_device)) {
         class_destroy(class);
         unregister_chrdev(majorNumber, DEVICE_NAME);
