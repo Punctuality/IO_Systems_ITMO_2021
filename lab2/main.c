@@ -57,7 +57,7 @@ int c = 0; //Variable for Major Number
  * | Privary volume 20 MiB | Privary volume 20 MiB | 0x5001 | 0xA000 |
  * +-----------------------+-----------------------+--------+--------+
  * |                       |          EBR 1        | 0xF001 | 1      |
- * +-----------------------+-----------------------+--------+--------+ 
+ * |                       +-----------------------+--------+--------+ 
  * |    Extended volume    | Logical volume 10 MiB | 0xF002 | 0x5000 |
  * |         20 MiB        +-----------------------+--------+--------+
  * |                       |          EBR 2        | 0x14002| 1      |
@@ -107,7 +107,7 @@ static PartTable def_part_table =
 	},
 	{
 		boot_type: 0x00,
-		part_type: 0x05, // bootable type
+		part_type: 0x05, // extended type
 		PART_ENTRY_COORDS_BY_LBA(0xF001,0xA002)
 	}
 };
@@ -318,4 +318,4 @@ module_init(mydiskdrive_init);
 module_exit(mydiskdrive_exit);
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("Sergey Fedorov,Anatoliy Anishenko");
-MODULE_DESCRIPTION("Lab2 - BLOCK DRIVER");
+MODULE_DESCRIPTION("Lab2: BLOCK DRIVER");
