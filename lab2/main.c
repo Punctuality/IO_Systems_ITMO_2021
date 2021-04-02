@@ -9,7 +9,6 @@
 #include <linux/bio.h>
 #include <linux/string.h>
 
-
 #define MEMSIZE 0x19003 // Size of Ram disk in sectors
 int c = 0; //Variable for Major Number 
 
@@ -132,8 +131,21 @@ static const PartTable def_log_part_table[] =
 			boot_type: 0x00,
 			part_type: 0x00,
 			PART_ENTRY_COORDS_BY_LBA(1,0x5000)
+		},
+		{
+			boot_type: 0x00,
+			start_head: 0x00,
+			start_sec: 0x00,
+			start_cyl_hi: 0x00,
+			start_cyl: 0x00,
+			part_type: 0x00,
+			end_head: 0x00,
+			end_sec: 0x00,
+			end_cyl_hi: 0x00,
+			end_cyl: 0x00,
+			abs_start_sec: 0x00,
+			sec_in_part: 0x00
 		}
-		// TODO empty logical
 	}
 };
 
