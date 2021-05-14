@@ -110,6 +110,6 @@ PING speedtest.net (151.101.194.219) 56(84) bytes of data.
 3 TARGET IP ADDRESS: 151.101.130.219
 4 TARGET IP ADDRESS: 151.101.66.219
 --- STATS ---
-RX = 0 packets (0 bytes)
-TX = 0 packets (0 bytes)
+RX = 150723 packets (161458661 bytes)
+TX = 153573 packets (144248975 bytes)
 ```
