@@ -4,6 +4,9 @@ linux/
 cmake-build-debug/
 docs/Интерфейс*
 
+.DS_Store
+.cache.mk
+
 *.o
 *.ko
 *.cmd
