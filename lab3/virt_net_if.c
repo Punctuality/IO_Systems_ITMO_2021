@@ -4,8 +4,10 @@
 #include <linux/etherdevice.h>
 #include <linux/moduleparam.h>
 #include <linux/in.h>
-#include <net/arp.h>
+#include <linux/proc_fs.h>
 #include <linux/ip.h>
+#include <net/arp.h>
+
 
 #define DEVICE_NAME "sniffer"
 
@@ -33,21 +35,17 @@ struct ipv4_address {
     unsigned char d;
 };
 
-// vk.com.			144	IN	A	87.240.190.78
-// vk.com.			144	IN	A	93.186.225.208
-// vk.com.			144	IN	A	87.240.139.194
-// vk.com.			144	IN	A	87.240.137.158
-// vk.com.			144	IN	A	87.240.190.67
-// vk.com.			144	IN	A	87.240.190.72
+// speedtest.net.		7196	IN	A	151.101.2.219
+// speedtest.net.		7196	IN	A	151.101.194.219
+// speedtest.net.		7196	IN	A	151.101.130.219
+// speedtest.net.		7196	IN	A	151.101.66.219
 
-#define TARGET_COUNT 6
+#define TARGET_COUNT 4
 static struct ipv4_address target_addrs[TARGET_COUNT] = {
-    { 87, 240, 190, 78 },
-    { 93, 186, 225, 208 },
-    { 87, 240, 139, 194 },
-    { 87, 240, 137, 158 },
-    { 87, 240, 190, 67 },
-    { 87, 240, 190, 72 }
+    { 151, 101, 2, 219 },
+    { 151, 101, 194, 219 },
+    { 151, 101, 130, 219 },
+    { 151, 101, 66, 219 }
 };
 
 #define IPV4_EQUALS(__addr1, __addr2) (                     \
@@ -64,7 +62,8 @@ static struct ipv4_address target_addrs[TARGET_COUNT] = {
 
 #define IPV4_STR_FORM(__addr) __addr.a, __addr.b, __addr.c, __addr.d
 
-#define PROC_STR_LEN 35
+#define PROC_STR_LEN 60
+static struct proc_dir_entry* net_proc_entry;
 
 static void ipv4_frame_process(struct sk_buff *skb, char *mode_name) {
     struct iphdr *ip = (struct iphdr *)skb_network_header(skb);
@@ -87,8 +86,8 @@ static void ipv4_frame_process(struct sk_buff *skb, char *mode_name) {
         snprintf(daddr_msg, IPV4_STR_MAX_SIZE, "%d.%d.%d.%d", IPV4_STR_FORM(dst));
 
         printk(
-            KERN_INFO "Captured %s IPv4 frame, saddr:%*s,\tdaddr:%*s\n", mode_name,
-            (int)IPV4_STR_MAX_SIZE, saddr_msg, (int)IPV4_STR_MAX_SIZE, daddr_msg
+            KERN_INFO "%s: Captured %s IPv4 frame, saddr:%*s,\tdaddr:%*s\n", THIS_MODULE->name, 
+            mode_name, (int)IPV4_STR_MAX_SIZE, saddr_msg, (int)IPV4_STR_MAX_SIZE, daddr_msg
         );
     }
 }
@@ -138,56 +137,43 @@ static struct net_device_stats *get_stats(struct net_device *dev) {
 
 static ssize_t proc_read(struct file* file, char __user *ubuf, size_t count, loff_t* ppos) {
     // One line for RX, second for TX + ADDRESSES LINE + GAP LINE
-    char *buf = kzalloc(sizeof(char) * PROC_STR_LEN * (2 + 1 + TARGET_COUNT), GFP_KERNEL);
+    size_t lines_count = (2 + 1 + TARGET_COUNT);
+    size_t bytes_count = sizeof(char) * PROC_STR_LEN * lines_count;
+    char *buf = kzalloc(bytes_count, GFP_KERNEL);
 
     printk(KERN_NOTICE "%s: Invoked proc_read\n", THIS_MODULE->name);
 
-    size_t list_size = list_length(&head_res);
-    long long all_sum = 0;
-    list_for_each(ptr, &head_res) {
-        entry = list_entry(ptr, struct list_res, list);
-        switch (entry->error) {
-            case NO_ERROR: {
-                snprintf(buf+(i*LONG_STR_LEN), LONG_STR_LEN, "Result %ld: %ld\n", list_size - i, entry->result);
-                printk(KERN_NOTICE "%s: Result %ld: %ld\n", THIS_MODULE->name, list_size - i, entry->result);
-                all_sum += entry->result;
-                break;
-            }
-            case ZERO_DIVISION: {
-                snprintf(buf+(i*LONG_STR_LEN), LONG_STR_LEN, "%s\n", "ERR: ZeroDivision");
-                printk(KERN_ALERT "%s: Result %ld: %s\n", THIS_MODULE->name, list_size - i, "ERR: ZeroDivision");
-                break;
-            }
-            case WRONG_EXPRESSION: {
-                snprintf(buf+(i*LONG_STR_LEN), LONG_STR_LEN, "%s\n", "ERR: WrongExpression");
-                printk(KERN_ALERT "%s: Result %ld: %s\n", THIS_MODULE->name, list_size - i, "ERR: WrongExpression");
-                break;
-            }
-            case EMPTY_EXPRESSION: {
-                snprintf(buf+(i*LONG_STR_LEN), LONG_STR_LEN, "%s\n", "ERR: EmptyExpression");
-                printk(KERN_ALERT "%s: Result %ld: %s\n", THIS_MODULE->name, list_size - i, "ERR: EmptyExpression");
-                break;
-            }
-        }
-        i++;
+    int i;
+    for (i = 0; i < TARGET_COUNT; i++) {
+        snprintf(
+            buf+(i*PROC_STR_LEN), 
+            PROC_STR_LEN,
+            "%d TARGET IP ADDRESS: %d.%d.%d.%d\n", 
+            i + 1, IPV4_STR_FORM(target_addrs[i])
+        );
     }
 
-    printk(KERN_NOTICE "%s: Sum of all correct expressions: %lld\n", THIS_MODULE->name, all_sum);
-    size_t len = LONG_STR_LEN * list_size;
+    snprintf(buf + (TARGET_COUNT * PROC_STR_LEN), PROC_STR_LEN, "--- STATS ---\n");
+    snprintf(
+            buf + ((TARGET_COUNT + 1) * PROC_STR_LEN), PROC_STR_LEN, 
+            "RX = %ld packets (%ld bytes)\n", stats.rx_packets, stats.rx_bytes
+        );
+    snprintf(
+            buf + ((TARGET_COUNT + 2) * PROC_STR_LEN), PROC_STR_LEN, 
+            "TX = %ld packets (%ld bytes)\n", stats.tx_packets, stats.tx_bytes
+        );
 
-    if (*ppos > 0 || count < len){
+    if (*ppos > 0 || count < bytes_count){
         return 0;
     }
 
-    if (copy_to_user(ubuf, buf, len)){
+    if (copy_to_user(ubuf, buf, bytes_count)){
         return -EFAULT;
     }
 
-    *ppos = len;
-
+    *ppos = bytes_count;
     kfree(buf);
-
-    return len;
+    return bytes_count;
 }
 
 static struct net_device_ops vni_net_device_ops = {
@@ -247,9 +233,15 @@ int __init vni_init(void) {
     rtnl_lock();
     netdev_rx_handler_register(priv->parent, &handle_frame, NULL);
     rtnl_unlock();
-    printk(KERN_INFO "Module %s loaded", THIS_MODULE->name);
+    printk(KERN_INFO "%s: Module loaded", THIS_MODULE->name);
     printk(KERN_INFO "%s: create link %s", THIS_MODULE->name, child->name);
     printk(KERN_INFO "%s: registered rx handler for %s", THIS_MODULE->name, priv->parent->name);
+
+    net_proc_entry = proc_create(DEVICE_NAME, 0444, NULL, &proc_fops);
+    if (!IS_ERR(net_proc_entry)) {
+        printk(KERN_INFO "%s: /proc/%s is created\n", THIS_MODULE->name, DEVICE_NAME);
+    }
+
     return 0; 
 }
 
@@ -263,7 +255,11 @@ void __exit vni_exit(void) {
     }
     unregister_netdev(child);
     free_netdev(child);
-    printk(KERN_INFO "Module %s unloaded", THIS_MODULE->name); 
+
+    proc_remove(net_proc_entry);
+    printk(KERN_INFO "%s: Proc /proc/%s destroyed\n", THIS_MODULE->name, DEVICE_NAME);
+
+    printk(KERN_INFO "%s: Module unloaded", THIS_MODULE->name); 
 } 
 
 module_init(vni_init);
