@@ -173,7 +173,7 @@ static ssize_t proc_read(struct file* file, char __user *ubuf, size_t count, lof
         return -EFAULT;
     }
 
-    *ppos = bytes_count;
+    *ppos += bytes_count;
     kfree(buf);
     return bytes_count;
 }
