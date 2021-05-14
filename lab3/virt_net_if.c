@@ -164,10 +164,12 @@ static ssize_t proc_read(struct file* file, char __user *ubuf, size_t count, lof
         );
 
     if (*ppos > 0 || count < bytes_count){
+        kfree(buf);
         return 0;
     }
 
     if (copy_to_user(ubuf, buf, bytes_count)){
+        kfree(buf);
         return -EFAULT;
     }
 
