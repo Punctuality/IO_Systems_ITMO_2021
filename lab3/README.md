@@ -26,6 +26,7 @@
 0. Тестовая передача IPv4 пакетов - `ping <destination address>`
 1. Просмотр логов ядра - `make show_logs`
 2. Вывод статистики - `cat /proc/sniffer`
+3. Смена режима сниффера - `echo 'A' > /dev/sniffer` (A - All, I - Incomming, T - Transmitting)
 
 ## Примеры использования
 
@@ -113,3 +114,16 @@ PING speedtest.net (151.101.194.219) 56(84) bytes of data.
 RX = 150723 packets (161458661 bytes)
 TX = 153573 packets (144248975 bytes)
 ```
+
+```bash
+echo 'a' > /dev/sniffer
+ping speedtest.net
+
+echo 'i' > /dev/sniffer
+ping speedtest.net
+
+echo 't' > /dev/sniffer
+ping speedtest.net
+```
+
+![Mode_Switching_Example](Mode_switching.png)
