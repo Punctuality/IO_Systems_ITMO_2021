@@ -1,3 +1,5 @@
+#include <linux/cdev.h>
+#include <linux/device.h>
 #include <linux/module.h>
 #include <linux/version.h>
 #include <linux/netdevice.h>
@@ -8,8 +10,13 @@
 #include <linux/ip.h>
 #include <net/arp.h>
 
-
+#ifndef DEVICE_NAME
 #define DEVICE_NAME "sniffer"
+#endif
+
+#ifndef CLASS_NAME
+#define CLASS_NAME "sniffer_mode_dev"
+#endif
 
 static char* link = "enp0s5";
 static char* ifname = "vni%d";
@@ -20,9 +27,15 @@ static struct net_device *child = NULL;
 struct priv {
     struct net_device *parent;
 };
-
+static char current_mode = 'a'; // a - all, i - incoming, t - trasmitting
 static char *incoming_mode = "INCOMING";
 static char *transmiting_mode = "TRANSMITING";
+
+static int devMajorNumber = 0;
+static int devMinorNumber = 0;
+static int device_open_count = 0;
+static struct device* chr_device;
+static struct class* chr_class;
 
 #define IPV4_STR_MAX_SIZE (sizeof("xxx.xxx.xxx.xxx"))
 static char saddr_msg[IPV4_STR_MAX_SIZE];
@@ -66,7 +79,7 @@ static struct ipv4_address target_addrs[TARGET_COUNT] = {
 static struct proc_dir_entry* net_proc_entry;
 
 static void ipv4_frame_process(struct sk_buff *skb, char *mode_name) {
-    struct iphdr *ip = (struct iphdr *)skb_network_header(skb);
+    struct iphdr *ip = (struct iphdr *) skb_network_header(skb);
 
     struct ipv4_address src = PARSE_IPV4_ADDR(ip->saddr);
     struct ipv4_address dst = PARSE_IPV4_ADDR(ip->daddr);
@@ -94,9 +107,11 @@ static void ipv4_frame_process(struct sk_buff *skb, char *mode_name) {
 
 static rx_handler_result_t handle_frame(struct sk_buff **pskb) {
    if (child) {
-        ipv4_frame_process(*pskb, incoming_mode);
-        stats.rx_packets++;
-        stats.rx_bytes += (*pskb)->len;
+        if (current_mode == 'a' || current_mode == 'i') {
+            ipv4_frame_process(*pskb, incoming_mode);
+            stats.rx_packets++;
+            stats.rx_bytes += (*pskb)->len;
+        }
         (*pskb)->dev = child;
         return RX_HANDLER_ANOTHER;
     }
@@ -118,9 +133,11 @@ static int stop(struct net_device *dev) {
 static netdev_tx_t start_xmit(struct sk_buff *skb, struct net_device *dev) {
     struct priv *priv = netdev_priv(dev);
 
-    ipv4_frame_process(skb, transmiting_mode);
-    stats.tx_packets++;
-    stats.tx_bytes += skb->len;
+    if (current_mode == 'a' || current_mode == 't') {
+        ipv4_frame_process(skb, transmiting_mode);
+        stats.tx_packets++;
+        stats.tx_bytes += skb->len;    
+    }
 
     if (priv->parent) {
         skb->dev = priv->parent;
@@ -178,6 +195,50 @@ static ssize_t proc_read(struct file* file, char __user *ubuf, size_t count, lof
     return bytes_count;
 }
 
+static int mode_dev_open(struct inode* inode, struct file* file) {
+    if (device_open_count)
+        return -EBUSY;
+    device_open_count++;
+
+    try_module_get(THIS_MODULE);
+    return 0;
+}
+
+static int mode_dev_release(struct inode* i, struct file* f) {
+    device_open_count--;
+    
+    module_put(THIS_MODULE);
+    return 0;
+}
+
+static ssize_t mode_dev_read(struct file *f, char __user *ubuf, size_t len, loff_t *off){
+    return len;
+}
+
+static ssize_t mode_dev_write(struct file *f, const char __user *ubuf, size_t len, loff_t *off) {
+    if (len == 0 || *off > 0) {
+        printk(KERN_WARNING "%s: Wrong input structure for dev file switcher\n", THIS_MODULE->name);
+        return 0;
+    } else {
+        char c;
+        get_user(c, ubuf);
+        if (c == '0' || c == 'a' || c == 'A') {
+            current_mode = 'a';
+            printk(KERN_INFO "%s: Switched mode to ALL\n", THIS_MODULE->name);
+        } else if (c == '1' || c == 'i' || c =='I') {
+            printk(KERN_INFO "%s: Switched mode to INCOMMING\n", THIS_MODULE->name);
+            current_mode = 'i';
+        } else if (c == '2' || c == 't' || c == 'T') {
+            printk(KERN_INFO "%s: Switched mode to TRANSMITTING\n", THIS_MODULE->name);
+            current_mode = 't';
+        } else {
+            printk(KERN_INFO "%s: Wrong input mode (%c) for dev file switcher\n", THIS_MODULE->name, c);
+        }
+
+        return len;
+    }
+}
+
 static struct net_device_ops vni_net_device_ops = {
     .ndo_open = open,
     .ndo_stop = stop,
@@ -188,6 +249,14 @@ static struct net_device_ops vni_net_device_ops = {
 static struct file_operations proc_fops = {
     .owner = THIS_MODULE,
     .read  = proc_read
+};
+
+static struct file_operations mode_dev_fops = {
+    .owner   = THIS_MODULE,
+    .open    = mode_dev_open,
+    .release = mode_dev_release,
+    .read    = mode_dev_read,
+    .write   = mode_dev_write
 };
 
 static void setup(struct net_device *dev) {
@@ -201,7 +270,43 @@ static void setup(struct net_device *dev) {
         dev->dev_addr[i] = (char)i;
 } 
 
+static char *devnode(struct device *dev, umode_t *mode) {
+   if (mode)
+     *mode = 0666;
+   return NULL;
+ }
+
 int __init vni_init(void) {
+
+    devMajorNumber = register_chrdev(devMajorNumber, DEVICE_NAME, &mode_dev_fops);
+    if (devMajorNumber < 0) {
+        printk(KERN_ALERT "%s: failed to register major\n", THIS_MODULE->name);
+        return devMajorNumber;
+    } else {
+        printk(KERN_INFO "%s: Registered 'mode dev' with major %d\n", THIS_MODULE->name, devMajorNumber);
+    }
+
+    chr_class = class_create(THIS_MODULE, CLASS_NAME);
+    if (IS_ERR(chr_class)) {
+        unregister_chrdev(devMajorNumber, DEVICE_NAME);
+        printk(KERN_ALERT "%s: Failed to register device class: %s\n", THIS_MODULE->name, CLASS_NAME);
+        return PTR_ERR(chr_class);
+    } else {
+        printk(KERN_INFO "%s: Registered device class: %s\n", THIS_MODULE->name, CLASS_NAME);
+    }
+
+    chr_class->devnode = devnode;
+
+    chr_device = device_create(chr_class, NULL, MKDEV(devMajorNumber, devMinorNumber), NULL, DEVICE_NAME);
+    if (IS_ERR(chr_device)) {
+        class_destroy(chr_class);
+        unregister_chrdev(devMajorNumber, DEVICE_NAME);
+        printk(KERN_ALERT "%s: Failed to create device: %s\n", THIS_MODULE->name, DEVICE_NAME);
+        return PTR_ERR(chr_device);
+    } else {
+        printk(KERN_INFO "%s: Registered device: /dev/%s\n", THIS_MODULE->name, DEVICE_NAME);
+    }
+
     int err = 0;
     struct priv *priv;
     child = alloc_netdev(sizeof(struct priv), ifname, NET_NAME_UNKNOWN, setup);
@@ -237,7 +342,7 @@ int __init vni_init(void) {
     rtnl_unlock();
     printk(KERN_INFO "%s: Module loaded", THIS_MODULE->name);
     printk(KERN_INFO "%s: create link %s", THIS_MODULE->name, child->name);
-    printk(KERN_INFO "%s: registered rx handler for %s", THIS_MODULE->name, priv->parent->name);
+    printk(KERN_INFO "%s: registered rx/tx handler for %s", THIS_MODULE->name, priv->parent->name);
 
     net_proc_entry = proc_create(DEVICE_NAME, 0444, NULL, &proc_fops);
     if (!IS_ERR(net_proc_entry)) {
@@ -260,6 +365,12 @@ void __exit vni_exit(void) {
 
     proc_remove(net_proc_entry);
     printk(KERN_INFO "%s: Proc /proc/%s destroyed\n", THIS_MODULE->name, DEVICE_NAME);
+
+    device_destroy(chr_class, MKDEV(devMajorNumber, 0));
+    class_unregister(chr_class);
+    class_destroy(chr_class);
+    unregister_chrdev(devMajorNumber, DEVICE_NAME);
+    printk(KERN_INFO "%s: Device /dev/%s destroyed\n", THIS_MODULE->name, DEVICE_NAME);
 
     printk(KERN_INFO "%s: Module unloaded", THIS_MODULE->name); 
 } 
